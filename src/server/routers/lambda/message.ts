@@ -1,8 +1,8 @@
 import { z } from 'zod';
 
+import { MessageModel } from '@/database/models/message';
 import { updateMessagePluginSchema } from '@/database/schemas';
 import { serverDB } from '@/database/server';
-import { MessageModel } from '@/database/server/models/message';
 import { authedProcedure, publicProcedure, router } from '@/libs/trpc';
 import { getFullFileUrl } from '@/server/utils/files';
 import { ChatMessage } from '@/types/message';
@@ -164,6 +164,17 @@ export const messageRouter = router({
     )
     .mutation(async ({ input, ctx }) => {
       return ctx.messageModel.updateMessagePlugin(input.id, input.value);
+    }),
+
+  updatePluginError: messageProcedure
+    .input(
+      z.object({
+        id: z.string(),
+        value: z.object({}).passthrough().nullable(),
+      }),
+    )
+    .mutation(async ({ input, ctx }) => {
+      return ctx.messageModel.updateMessagePlugin(input.id, { error: input.value });
     }),
 
   updatePluginState: messageProcedure

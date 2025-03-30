@@ -2,14 +2,15 @@ import { z } from 'zod';
 
 import { INBOX_SESSION_ID } from '@/const/session';
 import { DEFAULT_AGENT_CONFIG } from '@/const/settings';
+import { AgentModel } from '@/database/models/agent';
+import { FileModel } from '@/database/models/file';
+import { KnowledgeBaseModel } from '@/database/models/knowledgeBase';
+import { SessionModel } from '@/database/models/session';
+import { UserModel } from '@/database/models/user';
 import { serverDB } from '@/database/server';
-import { AgentModel } from '@/database/server/models/agent';
-import { FileModel } from '@/database/server/models/file';
-import { KnowledgeBaseModel } from '@/database/server/models/knowledgeBase';
-import { SessionModel } from '@/database/server/models/session';
-import { UserModel } from '@/database/server/models/user';
 import { pino } from '@/libs/logger';
 import { authedProcedure, router } from '@/libs/trpc';
+import { AgentService } from '@/server/services/agent';
 import { KnowledgeItem, KnowledgeType } from '@/types/knowledgeBase';
 
 const agentProcedure = authedProcedure.use(async (opts) => {
@@ -18,6 +19,7 @@ const agentProcedure = authedProcedure.use(async (opts) => {
   return opts.next({
     ctx: {
       agentModel: new AgentModel(serverDB, ctx.userId),
+      agentService: new AgentService(serverDB, ctx.userId),
       fileModel: new FileModel(serverDB, ctx.userId),
       knowledgeBaseModel: new KnowledgeBaseModel(serverDB, ctx.userId),
       sessionModel: new SessionModel(serverDB, ctx.userId),
@@ -91,7 +93,7 @@ export const agentRouter = router({
           const user = await UserModel.findById(serverDB, ctx.userId);
           if (!user) return DEFAULT_AGENT_CONFIG;
 
-          const res = await ctx.sessionModel.createInbox();
+          const res = await ctx.agentService.createInbox();
           pino.info('create inbox session', res);
         }
       }
@@ -120,13 +122,16 @@ export const agentRouter = router({
       const knowledge = await ctx.agentModel.getAgentAssignedKnowledge(input.agentId);
 
       return [
-        ...files.map((file) => ({
-          enabled: knowledge.files.some((item) => item.id === file.id),
-          fileType: file.fileType,
-          id: file.id,
-          name: file.name,
-          type: KnowledgeType.File,
-        })),
+        ...files
+          // 过滤掉所有图片
+          .filter((file) => !file.fileType.startsWith('image'))
+          .map((file) => ({
+            enabled: knowledge.files.some((item) => item.id === file.id),
+            fileType: file.fileType,
+            id: file.id,
+            name: file.name,
+            type: KnowledgeType.File,
+          })),
         ...knowledgeBases.map((knowledgeBase) => ({
           avatar: knowledgeBase.avatar,
           description: knowledgeBase.description,
